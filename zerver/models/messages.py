@@ -838,3 +838,19 @@ class OnboardingUserMessage(models.Model):
 
     ALL_FLAGS = ["read", "historical", "starred"]
     flags: BitHandler = BitField(flags=ALL_FLAGS, default=0)
+
+
+#Model for our Tasks
+class Task(models.Model):
+    message = models.ForeignKey(Message, on_delete=CASCADE)
+    assignee = models.ForeignKey(UserProfile, on_delete=CASCADE, related_name='assigned_tasks')
+    creator = models.ForeignKey(UserProfile, on_delete=CASCADE, related_name='created_tasks')
+    title = models.TextField()
+    description = models.TextField(blank=True)
+    completed = models.BooleanField(default=False)
+    due_date = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        unique_together = ("message", "assignee", "title")
