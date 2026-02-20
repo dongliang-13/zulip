@@ -842,15 +842,18 @@ class OnboardingUserMessage(models.Model):
 
 #Model for our Tasks
 class Task(models.Model):
+    #each task belongs to one Zulip message
     message = models.ForeignKey(Message, on_delete=CASCADE)
+    #each task is assigned to one user, we can use "user.assigned_tasks.all()" later to implement MyTasks
     assignee = models.ForeignKey(UserProfile, on_delete=CASCADE, related_name='assigned_tasks')
     creator = models.ForeignKey(UserProfile, on_delete=CASCADE, related_name='created_tasks')
     title = models.TextField()
-    description = models.TextField(blank=True)
+    description = models.TextField(blank=True) #descriptions are optional
     completed = models.BooleanField(default=False)
-    due_date = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    completed_at = models.DateTimeField(null=True, blank=True)
+    due_date = models.DateTimeField(null=True, blank=True) #tasks due dates/deadlines are optional
+    created_at = models.DateTimeField(auto_now_add=True) #auto filled when task is created
+    completed_at = models.DateTimeField(null=True, blank=True) 
     
-    class Meta:
-        unique_together = ("message", "assignee", "title")
+    #We might use this below in the future in order to prevent duplicates
+    # class Meta:
+    #     unique_together = ("message", "assignee", "title")
