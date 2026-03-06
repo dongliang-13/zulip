@@ -277,7 +277,7 @@ from zerver.views.video_calls import (
 from zerver.views.welcome_bot_custom_message import send_test_welcome_bot_custom_message
 from zproject import dev_urls
 
-from zerver.views.tasks import create_task
+from zerver.views.tasks import create_task, list_message_tasks
 
 if settings.TWO_FACTOR_AUTHENTICATION_ENABLED:  # nocoverage
     from two_factor.gateways.twilio.urls import urlpatterns as tf_twilio_urls
@@ -448,9 +448,11 @@ v1_api_and_json_patterns = [
     # POST adds a reaction to a message
     # DELETE removes a reaction from a message
     rest_path("messages/<int:message_id>/reactions", POST=add_reaction, DELETE=remove_reaction),
-
-    #NEW ENDPOINT FOR HANDLING REACTIONS - YANG LU
-    rest_path( "messages/<int:message_id>/tasks", POST=create_task,),
+    rest_path(
+        "messages/<int:message_id>/tasks",
+        GET=list_message_tasks,
+        POST=create_task,
+    ),
 
     # read_receipts -> zerver.views.read_receipts
     rest_path("messages/<int:message_id>/read_receipts", GET=read_receipts),
