@@ -845,6 +845,10 @@ function loadTasks() {
         method: "GET",
         success: (response) => {
             const tasks = response.tasks || [];
+            // Store tasks globally for search functionality
+            if ($("#tasks-overlay").length > 0) {
+                $("#tasks-overlay").data('allTasks', tasks);
+            }
             displayTasks(tasks);
         },
         error: (xhr) => {
@@ -860,14 +864,34 @@ function loadTasks() {
 }
 
 function displayTasks(tasks) {
+    const allTasks = $("#tasks-overlay").data('allTasks') || [];
+    const isSearching = $("#tasks-search").val().length > 0;
+    
     if (tasks.length === 0) {
+        const message = isSearching ? 
+            "🔍 No tasks found matching your search." :
+            "📋 No tasks yet!";
+        const subtext = isSearching ?
+            "Try adjusting your search terms." :
+            "Use /todo in messages to create tasks, then click 'Add to My Tasks' to assign them.";
+            
         $("#tasks-content").html(`
             <div style="color: #666; text-align: center; padding: 40px 0;">
-                <p>📋 No tasks yet!</p>
-                <p style="font-size: 14px; margin-top: 10px;">Use /todo in messages to create tasks, then click "→ Task" to assign them.</p>
+                <p>${message}</p>
+                <p style="font-size: 14px; margin-top: 10px;">${subtext}</p>
             </div>
         `);
         return;
+    }
+    
+    // Show search results count
+    let headerHtml = "";
+    if (isSearching) {
+        headerHtml = `
+            <div style="color: #666; font-size: 14px; margin-bottom: 15px; text-align: center;">
+                Found ${tasks.length} of ${allTasks.length} tasks
+            </div>
+        `;
     }
 
     const tasksHtml = tasks.map(task => `
@@ -930,6 +954,7 @@ function displayTasks(tasks) {
     `).join('');
 
     $("#tasks-content").html(`
+        ${headerHtml}
         <div style="max-height: 400px; overflow-y: auto;">
             ${tasksHtml}
         </div>
@@ -1087,6 +1112,18 @@ $(document).ready(() => {
                                 color: #666;
                             ">&times;</button>
                         </div>
+                        <div style="margin-bottom: 20px;">
+                            <input type="text" id="tasks-search" placeholder="Search tasks..." style="
+                                width: 100%;
+                                padding: 12px 14px;
+                                border: 1px solid #ddd;
+                                border-radius: 6px;
+                                font-size: 14px;
+                                box-sizing: border-box;
+                                background: white;
+                                color: black;
+                            ">
+                        </div>
                         <div id="tasks-content">
                             <div style="color: #666; text-align: center; padding: 40px 0;">
                                 <p>Loading tasks...</p>
@@ -1108,12 +1145,24 @@ $(document).ready(() => {
                     $("#tasks-overlay").hide();
                 }
             });
+            
+            // Search functionality
+            $("#tasks-search").on("input", (e) => {
+                const searchTerm = $(e.target).val().toLowerCase();
+                const allTasks = $("#tasks-overlay").data('allTasks') || [];
+                const filteredTasks = allTasks.filter(task => 
+                    task.title.toLowerCase().includes(searchTerm) ||
+                    (task.description && task.description.toLowerCase().includes(searchTerm))
+                );
+                displayTasks(filteredTasks);
+            });
         }
         
         // Show the overlay
         $("#tasks-overlay").show();
         
-        // Load tasks
+        // Clear search field and load tasks
+        $("#tasks-search").val('');
         loadTasks();
     });
 });
