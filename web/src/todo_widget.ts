@@ -82,6 +82,7 @@ const new_task_inbound_data_schema = z.object({
     key: z.int().check(z.nonnegative(), z.lte(MAX_IDX)),
     task: z.string(),
     desc: z.string(),
+    date: z.optional(z.nullable(z.string())),
     completed: z.boolean(),
 });
 
@@ -107,6 +108,7 @@ type Task = {
     desc: string;
     idx: number;
     key: string;
+    date: Date | null;
     completed: boolean;
 };
 
@@ -166,13 +168,14 @@ export class TaskData {
         },
 
         new_task: {
-            outbound: (task: string, desc: string): NewTaskOutboundData | undefined => {
+            outbound: (task: string, desc: string, date: Date | null): NewTaskOutboundData | undefined => {
                 this.my_idx += 1;
                 const event = {
                     type: "new_task" as const,
                     key: this.my_idx,
                     task,
                     desc,
+                    date: date ? date.toISOString() : null,
                     completed: false,
                 };
 
@@ -198,6 +201,7 @@ export class TaskData {
                 const idx = data.key;
                 const task = data.task;
                 const desc = data.desc;
+                const date = data.date ? new Date(data.date) : null;
 
                 const key = idx + "," + sender_id;
                 const completed = data.completed;
@@ -205,6 +209,7 @@ export class TaskData {
                 const task_data = {
                     task,
                     desc,
+                    date,
                     idx,
                     key,
                     completed,
@@ -318,15 +323,13 @@ export class TaskData {
     }
 
     get_widget_data(): {
-        all_tasks: Task[];
+        all_tasks: Array<Omit<Task, "date"> & { date: string | null }>;
     } {
-        const all_tasks = [...this.task_map.values()];
-
-        const widget_data = {
-            all_tasks,
-        };
-
-        return widget_data;
+        const all_tasks = [...this.task_map.values()].map((task) => ({
+            ...task,
+            date: task.date ? task.date.toISOString().split("T")[0] : null,
+        }));
+        return { all_tasks };
     }
 
     name_in_use(name: string): boolean {
@@ -346,6 +349,7 @@ export class TaskData {
         }
 
         const {data} = parsed;
+        // console.log("loaded data: ", data);
         const type = data.type;
         if (this.handle[type]) {
             this.handle[type].inbound(sender_id, data);
@@ -443,12 +447,19 @@ export function activate({
         $elem.find(".widget-error").text("");
         const task = $elem.find<HTMLInputElement>("input.add-task").val()?.trim() ?? "";
         const desc = $elem.find<HTMLInputElement>("input.add-desc").val()?.trim() ?? "";
+        const dateStr = $elem.find<HTMLInputElement>("input.add-due-date").val()?.trim() ?? "";
         if (task === "") {
             return;
         }
 
+        let date: Date | null = null;
+        if (dateStr) {
+            date = new Date(dateStr);   
+        }
+
         $elem.find("input.add-task").val("").trigger("focus");
         $elem.find("input.add-desc").val("");
+        $elem.find("input.add-due-date").val("");
 
         // This case should not generally occur.
         const task_exists = task_data.name_in_use(task);
@@ -456,8 +467,8 @@ export function activate({
             $elem.find(".widget-error").text($t({defaultMessage: "Task already exists"}));
             return;
         }
-
-        const data = task_data.handle.new_task.outbound(task, desc);
+        const data = task_data.handle.new_task.outbound(task, desc, date);
+        // console.log("data", data)
         if (data) {
             callback(data);
         }
@@ -513,7 +524,7 @@ export function activate({
             add_task();
         });
 
-        $elem.find("input.add-task, input.add-desc").on("keydown", (e) => {
+        $elem.find("input.add-task, input.add-desc, input.add-due-date").on("keydown", (e) => {
             if (e.key === "Enter") {
                 e.stopPropagation();
                 e.preventDefault();

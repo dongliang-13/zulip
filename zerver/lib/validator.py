@@ -531,6 +531,9 @@ def validate_todo_data(todo_data: object, is_widget_author: bool) -> None:
                 ("task", check_string),
                 ("desc", check_string),
                 ("completed", check_bool),
+            ],
+            optional_keys=[
+                ("date", check_union([check_string, check_none_or(check_string)])),
             ]
         )
         checker("todo data", todo_data)
