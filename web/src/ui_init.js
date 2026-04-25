@@ -168,7 +168,7 @@ import * as user_group_edit from "./user_group_edit.ts";
 import * as user_group_edit_members from "./user_group_edit_members.ts";
 import * as user_group_popover from "./user_group_popover.ts";
 import * as user_groups from "./user_groups.ts";
-import {resolve_assignee_email} from "./user_tasks_assignment.ts";
+import { resolve_assignee_email } from "./user_tasks_assignment.ts";
 import * as user_profile from "./user_profile.ts";
 import { initialize_user_settings, user_settings } from "./user_settings.ts";
 import * as user_status from "./user_status.ts";
@@ -1347,6 +1347,17 @@ function showSimpleTaskForm(userName, userEmail) {
                             background: #f5f5f5;
                             color: black;
                         "></textarea>
+                        <input type="date" id="simple-task-due-date" placeholder="Due date (optional)..." style="
+                            width: 100%;
+                            padding: 10px;
+                            border: 1px solid #ddd;
+                            border-radius: 6px;
+                            font-size: 14px;
+                            box-sizing: border-box;
+                            margin-bottom: 15px;
+                            background: #f5f5f5;
+                            color: black;
+                        ">
                     </div>
                     <div style="display: flex; gap: 10px;">
                         <button id="simple-assign-btn" style="
@@ -1448,10 +1459,15 @@ function createTaskForUser(userEmail, title, description, userName) {
         return;
     }
 
+    const dueDate = $("#simple-task-due-date").val();
+    // Convert HTML date format (YYYY-MM-DD) to ISO format without timezone shifting
+    const formattedDueDate = dueDate ? dueDate + 'T12:00:00.000Z' : null;
+
     const data = {
         title: title,
         description: description,
         assignee: userEmail,
+        due_date: formattedDueDate,
     };
 
     channel.post({
@@ -1468,6 +1484,7 @@ function createTaskForUser(userEmail, title, description, userName) {
             // Reset form
             $("#simple-task-title").val("");
             $("#simple-task-desc").val("");
+            $("#simple-task-due-date").val("");
             $("#simple-assign-btn").prop('disabled', false).text('Assign');
 
             // Close assign form and show user's tasks
@@ -1603,6 +1620,13 @@ function displayUserTasks(tasks, userName) {
         var titleStyle = task.completed ? 'text-decoration: line-through;' : '';
         var descHtml = task.description ? '<div style="color: #000000; font-size: 14px;">' + task.description + '</div>' : '';
         var createdDate = new Date(task.created_at).toLocaleDateString();
+        var dueDateHtml = '';
+        if (task.due_date) {
+            var dueDate = new Date(task.due_date).toLocaleDateString();
+            dueDateHtml = '<div style="color: #007bff; font-size: 12px; margin-top: 2px;">Due: ' + dueDate + '</div>';
+        } else {
+            dueDateHtml = '<div style="color: #999; font-size: 12px; margin-top: 2px; font-style: italic;">No due date</div>';
+        }
 
         return '<div style="border: 1px solid #ddd; border-radius: 6px; padding: 15px; margin-bottom: 10px; background: ' + taskBg + ';">' +
             '<div style="display: flex; align-items: center;">' +
@@ -1617,6 +1641,7 @@ function displayUserTasks(tasks, userName) {
             '<div style="color: #999; font-size: 12px; margin-top: 5px;">' +
             'Created: ' + createdDate +
             '</div>' +
+            dueDateHtml +
             '</div>' +
             '</div>' +
             '</div>';
