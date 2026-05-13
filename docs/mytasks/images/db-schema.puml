@@ -1,0 +1,87 @@
+@startuml db-schema
+!theme plain
+skinparam linetype ortho
+skinparam backgroundColor white
+skinparam EntityBorderColor #555555
+skinparam EntityBackgroundColor #e8f4fd
+skinparam EntityHeaderBackgroundColor #4a90d9
+skinparam EntityFontColor #000000
+skinparam ArrowColor #444444
+
+title My Tasks — Database Schema (ERD)\nmigrations 0777 – 0779
+
+' ── Existing Zulip tables (abbreviated) ──────────────────────
+entity "**zerver_message**" as msg {
+  * id : bigint <<PK>>
+  --
+  content : text
+  date_sent : timestamptz
+  recipient_id : int <<FK>>
+  sender_id : int <<FK>>
+  subject : varchar(60)
+  ... (existing Zulip fields)
+}
+
+entity "**zerver_userprofile**" as user {
+  * id : int <<PK>>
+  --
+  email : varchar
+  delivery_email : varchar
+  full_name : varchar
+  realm_id : int <<FK>>
+  ... (existing Zulip fields)
+}
+
+' ── New tables added by this feature ─────────────────────────
+entity "**zerver_task**\n(migration 0777 + 0778)" as task #e8f4fd {
+  * id : bigint <<PK, auto>>
+  --
+  message_id : bigint <<FK, nullable>>
+  assignee_id : int <<FK, NOT NULL>>
+  creator_id : int <<FK, NOT NULL>>
+  --
+  title : text  <<NOT NULL>>
+  description : text  <<default ''>>
+  completed : boolean  <<default False>>
+  due_date : timestamptz  <<nullable>>
+  created_at : timestamptz  <<auto_now_add>>
+  completed_at : timestamptz  <<nullable>>
+}
+
+note right of task
+  message_id uses SET_NULL on delete
+  (migration 0778_task_message_nullable).
+  A task with message_id=NULL is a
+  "standalone task" — not linked to
+  any channel message.
+end note
+
+entity "**zerver_tasktimelog**\n(migration 0778)" as timelog #e8f4fd {
+  * id : bigint <<PK, auto>>
+  --
+  task_id : bigint <<FK, NOT NULL>>
+  user_id : int <<FK, NOT NULL>>
+  --
+  start_time : timestamptz  <<NOT NULL>>
+  end_time : timestamptz  <<nullable — active if NULL>>
+  duration_seconds : int  <<default 0>>
+  description : text  <<default ''>>
+  created_at : timestamptz  <<auto_now_add>>
+  updated_at : timestamptz  <<auto_now>>
+}
+
+note right of timelog
+  Ordering: -created_at (newest first).
+  Active timer: end_time IS NULL.
+  duration_seconds computed on stop:
+    (end_time - start_time).total_seconds()
+end note
+
+' ── Relationships ─────────────────────────────────────────────
+msg        ||--o{  task     : "linked_to\n(SET NULL on delete)"
+user       ||--o{  task     : "assignee\n(CASCADE on delete)"
+user       ||--o{  task     : "creator\n(CASCADE on delete)"
+task       ||--o{  timelog  : "time_logs\n(CASCADE on delete)"
+user       ||--o{  timelog  : "tracked_by\n(CASCADE on delete)"
+
+@enduml

@@ -1,0 +1,116 @@
+@startuml data-flow
+!theme plain
+skinparam backgroundColor white
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceBoxBorderColor #888888
+skinparam sequenceParticipantBackgroundColor #e8f4fd
+skinparam sequenceParticipantBorderColor #555555
+skinparam sequenceActorBackgroundColor #eaf4ea
+skinparam sequenceActorBorderColor #555555
+skinparam sequenceDatabaseBackgroundColor #fff8e1
+skinparam sequenceDatabaseBorderColor #888888
+skinparam noteBorderColor #cccccc
+skinparam noteBackgroundColor #fffde7
+
+' ============================================================
+== Flow A: Create Task from Todo Widget ==
+' ============================================================
+
+actor User
+participant "todo_widget.ts" as TW
+participant "task_message_store.ts" as TMS
+participant "Django\n(tasks.py)" as API #LightBlue
+database "PostgreSQL" as DB
+
+User -> TW : Click "Add to My Tasks"
+TW -> API : POST /json/messages/{id}/tasks
+note right of TW
+  Payload:
+  { title, description, due_date }
+end note
+
+API -> DB : Task.objects.create(\n  message=msg, assignee=user,\n  title=title, due_date=due_date\n)
+DB --> API : Task row saved
+
+API -> API : internal_send_stream_message()
+note right of API
+  Posts notification to channel:
+  "Task assigned by X to Y: <title>"
+end note
+
+API --> TW : { task_id, title, description,\n  completed, due_date }
+
+TW -> TMS : add_todo_item_task(\n  message_id, title, task_id, key)
+note right of TMS
+  Registers mapping so the
+  "Add" button shows correct
+  state on next page load.
+end note
+
+TW --> User : Button → "✓ Added — click to remove"
+
+|||
+' ============================================================
+== Flow B: View My Tasks ==
+' ============================================================
+
+actor User2 as "User"
+participant "tasks_view.ts" as TV
+participant "Django\n(tasks.py)" as API2 #LightBlue
+database "PostgreSQL" as DB2
+
+User2 -> TV : Click #tasks-toggle-button
+TV -> TV : show() → load_tasks()
+TV -> API2 : GET /json/users/me/tasks\n[?assignee=<email>]
+
+API2 -> DB2 : Task.objects.filter(assignee=target_user)\n.select_related("message__recipient", "creator")
+DB2 --> API2 : Task rows
+
+loop for each task
+  API2 -> DB2 : TaskTimeLog.objects.filter(task=task)
+  DB2 --> API2 : Time log rows (sum duration, check active)
+end
+
+API2 --> TV : { tasks: [\n  { task_id, title, description,\n    completed, due_date,\n    message_id, stream_id, topic,\n    creator_email, creator_full_name,\n    total_time_seconds,\n    total_time_formatted,\n    active_timer }\n] }
+
+TV -> TV : render_modal()\n→ apply search_query + current_filter
+TV --> User2 : #tasks-modal rendered in DOM
+
+|||
+' ============================================================
+== Flow C: Mark Task Complete (with Todo Widget Sync) ==
+' ============================================================
+
+actor User3 as "User"
+participant "tasks_view.ts" as TV2
+participant "task_message_store.ts" as TMS2
+participant "Django\n(tasks.py)" as API3 #LightBlue
+database "PostgreSQL" as DB3
+participant "All Viewers\n(via Tornado)" as ALL #PaleGreen
+
+User3 -> TV2 : Check task checkbox
+TV2 -> API3 : POST /json/tasks/{id}\n{ completed: "true" }
+
+API3 -> DB3 : task.completed = True\ntask.completed_at = now()\ntask.save()
+DB3 --> API3 : OK
+
+API3 --> TV2 : { task_id, completed: true,\n  completed_at: "..." }
+
+TV2 -> TV2 : task.completed = true (local copy)
+
+alt task has message_id (linked to a channel message)
+  TV2 -> TMS2 : get_todo_item_key(message_id, title)
+  TMS2 --> TV2 : widget key (e.g. "0")
+
+  TV2 -> API3 : POST /json/submessage\n{ message_id, msg_type:"widget",\n  content: {type:"strike", key:"0"} }
+
+  API3 -> ALL : Tornado broadcast submessage event\nto all connected clients
+
+  ALL --> User3 : Todo widget checkbox toggled\nfor every viewer of the message
+else standalone task (no message_id)
+  TV2 -> TV2 : no submessage sent
+end
+
+TV2 -> TV2 : render_modal() — UI updated
+
+@enduml

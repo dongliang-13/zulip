@@ -1,0 +1,54 @@
+@startuml deployment-overview
+!theme plain
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam backgroundColor white
+skinparam ArrowColor #444444
+skinparam NodeBorderColor #888888
+skinparam NodeBackgroundColor #f5f5f5
+skinparam ComponentBorderColor #888888
+skinparam ComponentBackgroundColor #e8f4fd
+skinparam DatabaseBorderColor #888888
+skinparam DatabaseBackgroundColor #fff8e1
+
+title My Tasks — Deployment Overview
+
+actor "User" as user
+
+node "Browser" as browser_node #eaf4ea {
+    component "Zulip Web App\n(tasks_view.ts\ntodo_widget.ts\ntask_message_store.ts)" as webapp
+}
+
+node "Server — Zulip Stack" as server_node #f0f0f0 {
+    component "nginx\n(Reverse Proxy)" as nginx
+
+    component "Django / Gunicorn\n(zerver/views/tasks.py)" as django #e8f4fd
+
+    component "Tornado\n(WebSocket / Events)" as tornado #e8f4fd
+
+    database "PostgreSQL\n(zerver_task\nzerver_tasktimelog)" as postgres #fff8e1
+
+    database "Redis\n(Cache)" as redis #fff8e1
+}
+
+user --> webapp : interacts
+webapp -right-> nginx : HTTPS
+nginx -right-> django : HTTP (proxied)
+django -down-> postgres : ORM queries\n(Task, TaskTimeLog)
+django -right-> tornado : submessage events\n(completion sync)
+tornado -left-> webapp : WebSocket broadcast\n(todo widget updates)
+django ..> redis : cache lookups
+
+note bottom of django
+  All task endpoints live here:
+  POST /messages/{id}/tasks
+  GET  /users/me/tasks
+  POST /tasks/{id}
+  POST /tasks/{id}/delete
+  POST /tasks/{id}/time/start
+  POST /tasks/{id}/time/stop
+  GET  /tasks/{id}/time/logs
+  GET  /users/me/time/stats
+end note
+
+@enduml
