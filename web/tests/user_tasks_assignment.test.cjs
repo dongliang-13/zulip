@@ -59,10 +59,22 @@ run_test("resolve_assignee_email trims fallback email", () => {
     assert.equal(email, "zoe@example.com");
 });
 
-run_test("resolve_assignee_email preserves email casing", () => {
+run_test("resolve_assignee_email normalizes email to lowercase", () => {
+    // normalize_email() calls .toLowerCase() so the backend receives a
+    // consistent casing; the backend uses __iexact for lookup, so this
+    // is safe and intentional.
     const email = user_tasks_assignment.resolve_assignee_email({
         email: "AARON@zulip.com",
     });
 
-    assert.equal(email, "AARON@zulip.com");
+    assert.equal(email, "aaron@zulip.com");
+});
+
+run_test("resolve_assignee_email normalizes delivery_email to lowercase", () => {
+    const email = user_tasks_assignment.resolve_assignee_email({
+        delivery_email: "ZOEIP@EXAMPLE.COM",
+        email: "zoe@example.com",
+    });
+
+    assert.equal(email, "zoeip@example.com");
 });

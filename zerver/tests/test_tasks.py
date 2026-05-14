@@ -1,6 +1,7 @@
 from django.utils.timezone import now
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.models.messages import Task, TaskTimeLog
+from zerver.models import Recipient
+from zerver.models.messages import Message, Task, TaskTimeLog
 
 
 class TasksViewTest(ZulipTestCase):
@@ -632,3 +633,228 @@ class TasksViewTest(ZulipTestCase):
         task_breakdown = {task["task_id"]: task for task in data["task_breakdown"]}
         self.assertEqual(task_breakdown[task1.id]["total_formatted"], "1h 0m")
         self.assertEqual(task_breakdown[task2.id]["total_formatted"], "30m 0s")
+
+    # ------------------------------------------------------------------ #
+    # Stream notification tests
+    # ------------------------------------------------------------------ #
+
+    def test_stream_notification_posted_on_task_creation(self) -> None:
+        """Creating a task from a stream message posts a notification to that topic."""
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+
+        message_id = self.send_stream_message(
+            iago, "Verona", topic_name="notify-test", content="Do this"
+        )
+        before_count = Message.objects.filter(
+            recipient__type=Recipient.STREAM,
+            subject="notify-test",
+        ).count()
+
+        self.assert_json_success(
+            self.api_post(
+                hamlet,
+                f"/api/v1/messages/{message_id}/tasks",
+                {"title": "Notification task", "description": "", "assignee": iago.email},
+            ),
+            ignored_parameters=["title", "description", "assignee"],
+        )
+
+        after_count = Message.objects.filter(
+            recipient__type=Recipient.STREAM,
+            subject="notify-test",
+        ).count()
+        self.assertEqual(after_count, before_count + 1)
+
+        notification = (
+            Message.objects.filter(
+                recipient__type=Recipient.STREAM,
+                subject="notify-test",
+            )
+            .order_by("-id")
+            .first()
+        )
+        assert notification is not None
+        self.assertIn("Task assigned", notification.content)
+        self.assertIn("Notification task", notification.content)
+
+    def test_no_stream_notification_for_dm_task(self) -> None:
+        """Creating a task from a DM does not post any stream notification."""
+        hamlet = self.example_user("hamlet")
+        othello = self.example_user("othello")
+
+        dm_id = self.send_personal_message(hamlet, othello, "follow up")
+        stream_count_before = Message.objects.filter(recipient__type=Recipient.STREAM).count()
+
+        self.assert_json_success(
+            self.api_post(
+                hamlet,
+                f"/api/v1/messages/{dm_id}/tasks",
+                {"title": "DM task", "description": ""},
+            ),
+            ignored_parameters=["title", "description"],
+        )
+
+        stream_count_after = Message.objects.filter(recipient__type=Recipient.STREAM).count()
+        self.assertEqual(stream_count_before, stream_count_after)
+
+    # ------------------------------------------------------------------ #
+    # Time tracking edge cases
+    # ------------------------------------------------------------------ #
+
+    def test_start_time_tracking_duplicate_rejected(self) -> None:
+        """Starting a timer when one is already active returns an error."""
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+
+        message_id = self.send_stream_message(iago, "Verona", content="Duplicate timer")
+        task = Task.objects.create(
+            message_id=message_id,
+            assignee=hamlet,
+            creator=iago,
+            title="Duplicate timer task",
+        )
+
+        self.assert_json_success(
+            self.api_post(hamlet, f"/api/v1/tasks/{task.id}/time/start", {})
+        )
+        result = self.api_post(hamlet, f"/api/v1/tasks/{task.id}/time/start", {})
+        self.assert_json_error(result, "Timer already running for this task")
+
+    def test_stop_time_tracking_no_active_timer(self) -> None:
+        """Stopping when no timer is running returns an error."""
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+
+        message_id = self.send_stream_message(iago, "Verona", content="No timer")
+        task = Task.objects.create(
+            message_id=message_id,
+            assignee=hamlet,
+            creator=iago,
+            title="No timer task",
+        )
+
+        result = self.api_post(hamlet, f"/api/v1/tasks/{task.id}/time/stop", {})
+        self.assert_json_error(result, "No active timer found for this task")
+
+    def test_start_time_tracking_denied_for_third_party(self) -> None:
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+        cordelia = self.example_user("cordelia")
+
+        message_id = self.send_stream_message(iago, "Verona", content="Timer perm")
+        task = Task.objects.create(
+            message_id=message_id,
+            assignee=hamlet,
+            creator=iago,
+            title="Timer perm task",
+        )
+
+        result = self.api_post(cordelia, f"/api/v1/tasks/{task.id}/time/start", {})
+        self.assert_json_error(result, "Permission denied")
+
+    def test_stop_time_tracking_denied_for_third_party(self) -> None:
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+        cordelia = self.example_user("cordelia")
+
+        message_id = self.send_stream_message(iago, "Verona", content="Stop perm")
+        task = Task.objects.create(
+            message_id=message_id,
+            assignee=hamlet,
+            creator=iago,
+            title="Stop perm task",
+        )
+        TaskTimeLog.objects.create(task=task, user=hamlet, start_time=now(), end_time=None)
+
+        result = self.api_post(cordelia, f"/api/v1/tasks/{task.id}/time/stop", {})
+        self.assert_json_error(result, "Permission denied")
+
+    def test_get_task_time_logs_denied_for_third_party(self) -> None:
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+        cordelia = self.example_user("cordelia")
+
+        message_id = self.send_stream_message(iago, "Verona", content="Logs perm")
+        task = Task.objects.create(
+            message_id=message_id,
+            assignee=hamlet,
+            creator=iago,
+            title="Logs perm task",
+        )
+
+        result = self.api_get(cordelia, f"/api/v1/tasks/{task.id}/time/logs")
+        self.assert_json_error(result, "Permission denied")
+
+    def test_creator_can_start_and_stop_timer(self) -> None:
+        """The creator (not the assignee) can also track time."""
+        from datetime import timedelta
+
+        hamlet = self.example_user("hamlet")
+        iago = self.example_user("iago")
+
+        message_id = self.send_stream_message(hamlet, "Verona", content="Creator timer")
+        task = Task.objects.create(
+            message_id=message_id,
+            assignee=iago,
+            creator=hamlet,
+            title="Creator timer task",
+        )
+
+        start_data = self.assert_json_success(
+            self.api_post(hamlet, f"/api/v1/tasks/{task.id}/time/start", {})
+        )
+        self.assertTrue(start_data["is_active"])
+
+        # Back-date so duration > 0
+        TaskTimeLog.objects.filter(task=task, end_time__isnull=True).update(
+            start_time=now() - timedelta(seconds=5)
+        )
+
+        stop_data = self.assert_json_success(
+            self.api_post(hamlet, f"/api/v1/tasks/{task.id}/time/stop", {})
+        )
+        self.assertGreater(stop_data["duration_seconds"], 0)
+
+    # ------------------------------------------------------------------ #
+    # Not-found and invalid input edge cases
+    # ------------------------------------------------------------------ #
+
+    def test_start_time_tracking_task_not_found(self) -> None:
+        hamlet = self.example_user("hamlet")
+        result = self.api_post(hamlet, "/api/v1/tasks/999999/time/start", {})
+        self.assert_json_error(result, "Task not found")
+
+    def test_stop_time_tracking_task_not_found(self) -> None:
+        hamlet = self.example_user("hamlet")
+        result = self.api_post(hamlet, "/api/v1/tasks/999999/time/stop", {})
+        self.assert_json_error(result, "Task not found")
+
+    def test_get_task_time_logs_task_not_found(self) -> None:
+        hamlet = self.example_user("hamlet")
+        result = self.api_get(hamlet, "/api/v1/tasks/999999/time/logs")
+        self.assert_json_error(result, "Task not found")
+
+    def test_update_task_not_found(self) -> None:
+        hamlet = self.example_user("hamlet")
+        result = self.api_post(hamlet, "/api/v1/tasks/999999", {"completed": "true"})
+        self.assert_json_error(result, "Task not found")
+
+    def test_create_task_from_invalid_message_id(self) -> None:
+        hamlet = self.example_user("hamlet")
+        result = self.api_post(
+            hamlet,
+            "/api/v1/messages/999999/tasks",
+            {"title": "Ghost message", "description": ""},
+        )
+        self.assert_json_error(result, "Invalid message")
+
+    def test_time_stats_empty_when_no_logs(self) -> None:
+        """get_my_time_stats returns zeros when the user has no time logs at all."""
+        hamlet = self.example_user("hamlet")
+        result = self.api_get(hamlet, "/api/v1/users/me/time/stats")
+        data = self.assert_json_success(result)
+        self.assertEqual(data["total_time_seconds"], 0)
+        self.assertEqual(data["completed_sessions"], 0)
+        self.assertEqual(data["active_sessions"], 0)
+        self.assertEqual(data["task_breakdown"], [])
