@@ -511,8 +511,8 @@ export function initialize(): void {
 
         $(".option-row").each(function () {
             const todo_name = $(this).find(".todo-input").val();
-            const $todo_description = $(this).find(".todo-description-input");
-            $todo_description.prop("disabled", !todo_name);
+            $(this).find(".todo-description-input").prop("disabled", !todo_name);
+            $(this).find(".todo-due-date-input").prop("disabled", !todo_name);
         });
     });
 
@@ -527,9 +527,14 @@ export function initialize(): void {
                 let is_valid = true;
                 e.preventDefault();
                 e.stopPropagation();
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
                 $(".option-row").each(function () {
                     const todo_name = $(this).find(".todo-input").val();
                     const todo_description = $(this).find(".todo-description-input").val();
+                    const todo_due_date_val = $(this)
+                        .find<HTMLInputElement>(".todo-due-date-input")
+                        .val();
                     if (!todo_name && todo_description) {
                         ui_report.error(
                             $t_html({defaultMessage: "Please enter task title."}),
@@ -537,6 +542,17 @@ export function initialize(): void {
                             $("#dialog_error"),
                         );
                         is_valid = false;
+                    }
+                    if (todo_due_date_val) {
+                        const selected = new Date(todo_due_date_val + "T00:00:00");
+                        if (selected <= today) {
+                            ui_report.error(
+                                $t_html({defaultMessage: "Due date must be in the future."}),
+                                undefined,
+                                $("#dialog_error"),
+                            );
+                            is_valid = false;
+                        }
                     }
                 });
                 return is_valid;

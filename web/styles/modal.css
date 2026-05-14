@@ -1011,6 +1011,17 @@
                         margin-bottom: 0;
                     }
                 }
+
+                .todo-due-date-container {
+                    flex: 0 0 auto;
+                    display: flex;
+                    align-items: center;
+
+                    .todo-due-date-input {
+                        margin-bottom: 0;
+                        width: 140px;
+                    }
+                }
             }
 
             .option-row:first-child {
@@ -1041,6 +1052,12 @@
                     .todo-description-input {
                         width: 100%;
                         min-width: 90px;
+                    }
+                }
+
+                .todo-due-date-container {
+                    .todo-due-date-input {
+                        width: 100%;
                     }
                 }
             }
