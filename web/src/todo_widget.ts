@@ -89,7 +89,15 @@ function remove_task_from_todo(message_id: number, title: string, $btn: JQuery):
 
 export const todo_widget_extra_data_schema = z.object({
     task_list_title: z.optional(z.string()),
-    tasks: z.optional(z.array(z.object({task: z.string(), desc: z.string()}))),
+    tasks: z.optional(
+        z.array(
+            z.object({
+                task: z.string(),
+                desc: z.string(),
+                date: z.optional(z.nullable(z.string())),
+            }),
+        ),
+    ),
 });
 
 export type TodoWidgetExtraData = z.infer<typeof todo_widget_extra_data_schema>;
@@ -129,6 +137,7 @@ type TaskStrikeOutboundData = {
 type TodoTask = {
     task: string;
     desc: string;
+    date?: string | null;
 };
 
 type Task = {
@@ -324,6 +333,7 @@ export class TaskData {
                 key: i,
                 task: data.task,
                 desc: data.desc,
+                date: data.date ?? null,
                 completed: false,
             });
         }
@@ -482,7 +492,13 @@ export function activate({
 
         let date: Date | null = null;
         if (dateStr) {
-            date = new Date(dateStr);   
+            date = new Date(dateStr);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (date <= today) {
+                $elem.find(".widget-error").text($t({defaultMessage: "Due date must be in the future"}));
+                return;
+            }
         }
 
         $elem.find("input.add-task").val("").trigger("focus");

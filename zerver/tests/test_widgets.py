@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.validator import check_widget_content
-from zerver.lib.widget import get_widget_data, get_widget_type
+from zerver.lib.widget import get_widget_data, get_widget_type, parse_todo_extra_data
 from zerver.models import SubMessage, UserProfile
 
 if TYPE_CHECKING:
@@ -532,6 +532,107 @@ class WidgetContentTestCase(ZulipTestCase):
 
         assert_success(dict(type="new_task", key=7, task="eat", desc="", completed=False))
         assert_success(dict(type="strike", key="5,9"))
+
+    # ------------------------------------------------------------------
+    # [due:YYYY-MM-DD] tag parsing in todo extra_data
+    # ------------------------------------------------------------------
+
+    def test_todo_due_date_tag_extracted_into_date_field(self) -> None:
+        """A [due:YYYY-MM-DD] prefix in the description is parsed as the date field."""
+        extra_data = parse_todo_extra_data(" My List\ntask one: [due:2030-06-15] finish report")
+        self.assertEqual(extra_data["task_list_title"], "My List")
+        self.assert_length(extra_data["tasks"], 1)
+        task = extra_data["tasks"][0]
+        self.assertEqual(task["task"], "task one")
+        self.assertEqual(task["desc"], "finish report")
+        self.assertEqual(task["date"], "2030-06-15")
+
+    def test_todo_due_date_tag_with_no_description(self) -> None:
+        """A task with only a due-date tag has an empty description."""
+        extra_data = parse_todo_extra_data(" Title\ntask only date: [due:2030-01-01]")
+        task = extra_data["tasks"][0]
+        self.assertEqual(task["task"], "task only date")
+        self.assertEqual(task["desc"], "")
+        self.assertEqual(task["date"], "2030-01-01")
+
+    def test_todo_task_without_due_date_has_no_date_key(self) -> None:
+        """Tasks with a plain description must not get a date key."""
+        extra_data = parse_todo_extra_data(" Title\nnormal task: just a description")
+        task = extra_data["tasks"][0]
+        self.assertNotIn("date", task)
+        self.assertEqual(task["desc"], "just a description")
+
+    def test_todo_task_no_description_no_date(self) -> None:
+        """A bare task line (no colon) has empty desc and no date key."""
+        extra_data = parse_todo_extra_data(" Title\nbuy milk")
+        task = extra_data["tasks"][0]
+        self.assertEqual(task["task"], "buy milk")
+        self.assertEqual(task["desc"], "")
+        self.assertNotIn("date", task)
+
+    def test_todo_mixed_tasks_with_and_without_due_dates(self) -> None:
+        content = (
+            " Sprint\n"
+            "write tests: [due:2030-03-10] cover edge cases\n"
+            "deploy: no due date here\n"
+            "review PR: [due:2030-03-12]"
+        )
+        extra_data = parse_todo_extra_data(content)
+        tasks = extra_data["tasks"]
+        self.assert_length(tasks, 3)
+
+        self.assertEqual(tasks[0]["task"], "write tests")
+        self.assertEqual(tasks[0]["desc"], "cover edge cases")
+        self.assertEqual(tasks[0]["date"], "2030-03-10")
+
+        self.assertEqual(tasks[1]["task"], "deploy")
+        self.assertEqual(tasks[1]["desc"], "no due date here")
+        self.assertNotIn("date", tasks[1])
+
+        self.assertEqual(tasks[2]["task"], "review PR")
+        self.assertEqual(tasks[2]["desc"], "")
+        self.assertEqual(tasks[2]["date"], "2030-03-12")
+
+    def test_todo_malformed_due_date_tag_treated_as_description(self) -> None:
+        """A tag with the wrong format must not be parsed as a date."""
+        cases = [
+            "task: [due:not-a-date] desc",      # letters in date
+            "task: [due:2030-13-01] desc",       # month out of range (regex still matches, date stored)
+            "task: [due:20301301] desc",         # wrong separator
+            "task: [DUE:2030-01-01] desc",       # wrong case
+        ]
+        # The regex only matches \d{4}-\d{2}-\d{2}; anything else stays in desc.
+        no_match_cases = [
+            "task: [due:not-a-date] desc",
+            "task: [due:20301301] desc",
+            "task: [DUE:2030-01-01] desc",
+        ]
+        for content_line in no_match_cases:
+            extra_data = parse_todo_extra_data(f" T\n{content_line}")
+            task = extra_data["tasks"][0]
+            self.assertNotIn("date", task, msg=f"should not have date for: {content_line!r}")
+
+    def test_todo_due_date_via_widget_message(self) -> None:
+        """End-to-end: posting a /todo message with a [due:] tag stores the date in extra_data."""
+        sender = self.example_user("cordelia")
+        content = "/todo Project\nfinish report: [due:2030-07-04] quarterly review"
+
+        payload = dict(
+            type="stream",
+            to=orjson.dumps("Verona").decode(),
+            topic="dates",
+            content=content,
+        )
+        result = self.api_post(sender, "/api/v1/messages", payload)
+        self.assert_json_success(result)
+
+        submessage = SubMessage.objects.get(message_id=self.get_last_message().id)
+        data = orjson.loads(submessage.content)
+        tasks = data["extra_data"]["tasks"]
+        self.assert_length(tasks, 1)
+        self.assertEqual(tasks[0]["task"], "finish report")
+        self.assertEqual(tasks[0]["desc"], "quarterly review")
+        self.assertEqual(tasks[0]["date"], "2030-07-04")
 
     def test_get_widget_type(self) -> None:
         sender = self.example_user("cordelia")

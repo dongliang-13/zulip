@@ -66,6 +66,8 @@ def create_task(
             due_date = datetime.fromisoformat(due_date_str.replace('Z', '+00:00'))
         except ValueError:
             raise JsonableError("Invalid due date format")
+        if due_date <= timezone_now():
+            raise JsonableError("Due date must be in the future")
 
     task = Task.objects.create(
         message=message,
@@ -130,6 +132,8 @@ def create_standalone_task(
             due_date = datetime.fromisoformat(due_date_str.replace('Z', '+00:00'))
         except ValueError:
             raise JsonableError("Invalid due date format")
+        if due_date <= timezone_now():
+            raise JsonableError("Due date must be in the future")
 
     task = Task.objects.create(
         message=None,

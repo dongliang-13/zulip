@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest zerver/tests/test_tasks_api.py -x -q)",
+      "Bash(wsl *)"
+    ]
+  }
+}

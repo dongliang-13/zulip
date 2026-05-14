@@ -71,11 +71,33 @@ export function poll_options_setup(): void {
     setup_sortable_list("#add-poll-form .poll-options-list");
 }
 
+function get_tomorrow_date_str(): string {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
+}
+
+function set_todo_date_min(row: HTMLElement): void {
+    $(row).find("input.todo-due-date-input").attr("min", get_tomorrow_date_str());
+}
+
 export function todo_list_tasks_setup(): void {
     const $todo_options_list = $("#add-todo-form .todo-options-list");
+    const minDate = get_tomorrow_date_str();
+
+    // Set min date on all existing rows
+    $todo_options_list.find(".option-row").each(function (this: HTMLElement) {
+        $(this).find("input.todo-due-date-input").attr("min", minDate);
+    });
+
     $todo_options_list.on("input", "input.todo-input", function (this: HTMLElement) {
         add_option_row.call(this, "TODO");
+
+        // Set min date on the newly appended last row (if a new row was added)
+        const $last = $todo_options_list.find(".option-row:last-child");
+        set_todo_date_min($last[0]!);
     });
+
     $todo_options_list.on("click", "button.delete-option", delete_option_row);
 
     setup_sortable_list("#add-todo-form .todo-options-list");
@@ -101,20 +123,31 @@ export function frame_todo_message_content(): string {
     const todo_str = `/todo ${title}\n`;
 
     const todos: string[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     $(".option-row").each(function () {
         const todo_name = $(this).find<HTMLInputElement>("input.todo-input").val()?.trim() ?? "";
         const todo_description =
             $(this).find<HTMLInputElement>("input.todo-description-input").val()?.trim() ?? "";
+        const todo_due_date =
+            $(this).find<HTMLInputElement>("input.todo-due-date-input").val()?.trim() ?? "";
 
         if (todo_name) {
-            let todo = "";
-
-            if (todo_name && todo_description) {
-                todo = `${todo_name}: ${todo_description}`;
-            } else if (todo_name && !todo_description) {
-                todo = todo_name;
+            const desc_parts: string[] = [];
+            if (todo_due_date) {
+                const selected = new Date(todo_due_date + "T00:00:00");
+                if (selected > today) {
+                    // [due:YYYY-MM-DD] is parsed server-side to set the task's date field.
+                    desc_parts.push(`[due:${todo_due_date}]`);
+                }
             }
+            if (todo_description) {
+                desc_parts.push(todo_description);
+            }
+
+            const desc = desc_parts.join(" ");
+            const todo = desc ? `${todo_name}: ${desc}` : todo_name;
             todos.push(todo);
         }
     });
