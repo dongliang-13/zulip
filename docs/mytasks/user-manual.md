@@ -142,7 +142,7 @@ Search and filter tabs work together — both are applied simultaneously.
 Each task in the list has a checkbox on the left.
 
 - **Check the box** to mark the task complete. The title gains a strikethrough and the task moves to the "Completed" filter.
-- **Uncheck the box** to mark an already-complete task incomplete again.
+- **Uncheck the box** to mark an already complete task incomplete again.
 
 When a task that came from a todo widget is marked complete, the corresponding checkbox in the original todo widget is also toggled (the change is synced to all viewers of that message via a submessage event).
 

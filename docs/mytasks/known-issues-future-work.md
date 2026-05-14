@@ -20,7 +20,7 @@
 
 **Impact:** Low in most workflows; moderate when a manager and assignee both have My Tasks open simultaneously.
 
-**Workaround:** Re-open the My Tasks modal to refresh.
+**Workaround:** Reopen the My Tasks modal to refresh.
 
 ---
 

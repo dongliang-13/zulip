@@ -25,7 +25,7 @@ Zulip is a powerful group messaging platform, but it lacks native personal task 
 3. Support assigning tasks to other realm members.
 4. Support optional due dates with correct display across timezones.
 5. Provide lightweight time-tracking so users can measure effort on tasks.
-6. Prevent data-loss scenarios (e.g., deleting a message that still has linked tasks).
+6. Prevent data loss scenarios (e.g., deleting a message that still has linked tasks).
 
 ---
 

@@ -25,7 +25,7 @@ The My Tasks feature runs entirely within the standard Zulip stack. There are no
 The My Tasks feature uses:
 - Django ORM (PostgreSQL in production)
 - Standard Zulip HTTP request/response cycle (no Tornado events for task state)
-- Zulip's submessage broadcast mechanism (for syncing todo-widget checkbox state on task completion)
+- Zulip's submessage broadcast mechanism (for syncing todo widget checkbox state on task completion)
 
 ![Deployment Overview](images/deployment-overview.png)
 

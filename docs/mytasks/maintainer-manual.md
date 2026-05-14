@@ -348,11 +348,11 @@ This was fixed in PR #22 by adding a guard in `web/src/overlays.ts`. If it recur
 
 ### Tasks not appearing after creation
 
-The modal loads tasks fresh on `show()`. If a task is created programmatically, re-open the modal. The `task_message_store` is updated synchronously on create/delete so button states should be correct without a reload.
+The modal loads tasks fresh on `show()`. If a task is created programmatically, reopen the modal. The `task_message_store` is updated synchronously on create/delete so button states should be correct without a reload.
 
 ### Assignee not found error
 
-Check that the email passed is from the same Zulip realm. `_resolve_assignee` scopes lookups by `realm`. Cross-realm assignment is not supported.
+Check that the email passed is from the same Zulip realm. `_resolve_assignee` scopes lookups by `realm`. Cross realm assignment is not supported.
 
 ### "Permission denied" on task update/delete
 

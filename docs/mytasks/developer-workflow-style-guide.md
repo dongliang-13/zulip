@@ -20,7 +20,7 @@ The project uses a **feature-branch workflow** branching from `main`.
 - `main` — the primary integration branch; all PRs target this branch.
 - Feature branches — named by author/feature (e.g., `dongliang-13/feature/task-search-bar`, `yang/due-date`).
 
-There are no long-lived release branches. The convention from the commit history is:
+There are no long lived release branches. The convention from the commit history is:
 ```
 <github-username>/<brief-description>
 ```

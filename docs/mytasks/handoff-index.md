@@ -32,7 +32,7 @@ All documents live in `docs/mytasks/` in the main repository.
 
 The "My Tasks" feature extends Zulip with a personal task-management system embedded directly in the messaging interface. Users can:
 
-- Convert any channel message or todo-widget item into a task
+- Convert any channel message or todo widget item into a task
 - Assign tasks to themselves or other realm members
 - Set and track due dates
 - Filter and search tasks by status, title, description, or creator

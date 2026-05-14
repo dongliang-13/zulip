@@ -119,7 +119,7 @@ Task backend coverage (from task-related unit tests + coverage.py)
     missing_lines: 137401
 ```
 
-The 36 uncovered statements are primarily in the time-tracking error-fallback branches (the `except Exception: raise JsonableError("Time tracking feature not available")` paths that guard against a missing `TaskTimeLog` table). These are defensive branches that are not exercised because migrations are always applied before tests run.
+The 36 uncovered statements are primarily in the time tracking error-fallback branches (the `except Exception: raise JsonableError("Time tracking feature not available")` paths that guard against a missing `TaskTimeLog` table). These are defensive branches that are not exercised because migrations are always applied before tests run.
 
 ### Frontend coverage
 
