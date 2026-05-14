@@ -1,3 +1,7 @@
+from datetime import timedelta
+
+from django.utils.timezone import now
+
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models.messages import Task
 
@@ -129,3 +133,105 @@ class TasksApiUnitTest(ZulipTestCase):
         hamlet = self.example_user("hamlet")
         result = self.api_post(hamlet, "/api/v1/tasks", {"title": "", "description": ""})
         self.assert_json_error(result, "Missing title")
+
+    # ------------------------------------------------------------------
+    # Due-date future-only validation
+    # ------------------------------------------------------------------
+
+    def test_create_task_past_due_date_rejected(self) -> None:
+        hamlet = self.example_user("hamlet")
+        message_id = self.send_stream_message(hamlet, "Verona", content="past date")
+        yesterday = (now() - timedelta(days=1)).isoformat()
+        result = self.api_post(
+            hamlet,
+            f"/api/v1/messages/{message_id}/tasks",
+            {"title": "Overdue", "description": "", "due_date": yesterday},
+        )
+        self.assert_json_error(result, "Due date must be in the future")
+
+    def test_create_task_present_due_date_rejected(self) -> None:
+        hamlet = self.example_user("hamlet")
+        message_id = self.send_stream_message(hamlet, "Verona", content="present date")
+        # Subtract a small delta so the timestamp is guaranteed to be <= now()
+        # by the time the view processes it.
+        just_now = (now() - timedelta(seconds=1)).isoformat()
+        result = self.api_post(
+            hamlet,
+            f"/api/v1/messages/{message_id}/tasks",
+            {"title": "Right now", "description": "", "due_date": just_now},
+        )
+        self.assert_json_error(result, "Due date must be in the future")
+
+    def test_create_task_future_due_date_accepted(self) -> None:
+        hamlet = self.example_user("hamlet")
+        message_id = self.send_stream_message(hamlet, "Verona", content="future date")
+        tomorrow = (now() + timedelta(days=1)).isoformat()
+        result = self.api_post(
+            hamlet,
+            f"/api/v1/messages/{message_id}/tasks",
+            {"title": "Future task", "description": "", "due_date": tomorrow},
+        )
+        data = self.assert_json_success(
+            result, ignored_parameters=["title", "description", "due_date"]
+        )
+        self.assertIsNotNone(data["due_date"])
+
+    def test_create_standalone_task_past_due_date_rejected(self) -> None:
+        hamlet = self.example_user("hamlet")
+        yesterday = (now() - timedelta(days=1)).isoformat()
+        result = self.api_post(
+            hamlet,
+            "/api/v1/tasks",
+            {"title": "Late", "description": "", "due_date": yesterday},
+        )
+        self.assert_json_error(result, "Due date must be in the future")
+
+    def test_create_standalone_task_future_due_date_accepted(self) -> None:
+        hamlet = self.example_user("hamlet")
+        tomorrow = (now() + timedelta(days=1)).isoformat()
+        result = self.api_post(
+            hamlet,
+            "/api/v1/tasks",
+            {"title": "Future standalone", "description": "", "due_date": tomorrow},
+        )
+        data = self.assert_json_success(result)
+        self.assertIsNotNone(data["due_date"])
+
+    def test_create_task_no_due_date_accepted(self) -> None:
+        """Omitting due_date entirely must still succeed."""
+        hamlet = self.example_user("hamlet")
+        message_id = self.send_stream_message(hamlet, "Verona", content="no date")
+        result = self.api_post(
+            hamlet,
+            f"/api/v1/messages/{message_id}/tasks",
+            {"title": "No date", "description": ""},
+        )
+        data = self.assert_json_success(result, ignored_parameters=["title", "description"])
+        self.assertIsNone(data["due_date"])
+
+    def test_create_standalone_task_self_assigned_by_default(self) -> None:
+        """When no assignee is provided the task is assigned to the creator."""
+        hamlet = self.example_user("hamlet")
+        result = self.api_post(hamlet, "/api/v1/tasks", {"title": "Self task", "description": ""})
+        data = self.assert_json_success(result)
+        task = Task.objects.get(id=data["task_id"])
+        self.assertEqual(task.assignee_id, hamlet.id)
+        self.assertEqual(task.creator_id, hamlet.id)
+
+    def test_create_standalone_task_unknown_assignee_rejected(self) -> None:
+        hamlet = self.example_user("hamlet")
+        result = self.api_post(
+            hamlet,
+            "/api/v1/tasks",
+            {"title": "Ghost assign", "description": "", "assignee": "nobody@example.com"},
+        )
+        self.assert_json_error(result, "User nobody@example.com not found")
+
+    def test_create_standalone_task_invalid_due_date_format(self) -> None:
+        hamlet = self.example_user("hamlet")
+        result = self.api_post(
+            hamlet,
+            "/api/v1/tasks",
+            {"title": "Bad date", "description": "", "due_date": "not-a-date"},
+        )
+        self.assert_json_error(result, "Invalid due date format")
