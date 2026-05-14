@@ -42,6 +42,9 @@ def parse_poll_extra_data(content: str) -> Any:
     return extra_data
 
 
+_DUE_DATE_PREFIX_RE = re.compile(r"^\[due:(\d{4}-\d{2}-\d{2})\]\s*")
+
+
 def parse_todo_extra_data(content: str) -> Any:
     # This is used to extract the task list title from the todo command.
     # The command '/todo Title' will pre-set the task list title
@@ -58,12 +61,21 @@ def parse_todo_extra_data(content: str) -> Any:
             # a task and its description (optional) are separated
             # by the (first) `: ` substring
             task_data_array = task_data.split(": ", 1)
-            tasks.append(
-                {
-                    "task": task_data_array[0].strip(),
-                    "desc": task_data_array[1].strip() if len(task_data_array) > 1 else "",
-                }
-            )
+            task_name = task_data_array[0].strip()
+            raw_desc = task_data_array[1].strip() if len(task_data_array) > 1 else ""
+
+            # A `[due:YYYY-MM-DD]` tag at the start of the description
+            # encodes a due date set via the create-todo-list modal.
+            date: str | None = None
+            date_match = _DUE_DATE_PREFIX_RE.match(raw_desc)
+            if date_match:
+                date = date_match.group(1)
+                raw_desc = raw_desc[date_match.end():]
+
+            task_entry: dict[str, Any] = {"task": task_name, "desc": raw_desc}
+            if date:
+                task_entry["date"] = date
+            tasks.append(task_entry)
     extra_data = {
         "task_list_title": task_list_title,
         "tasks": tasks,

@@ -1347,6 +1347,7 @@ function showSimpleTaskForm(userName, userEmail) {
                             background: #f5f5f5;
                             color: black;
                         "></textarea>
+                        <label style="display: block; font-size: 13px; color: #666; margin-bottom: 4px;">Due date (optional, must be a future date)</label>
                         <input type="date" id="simple-task-due-date" placeholder="Due date (optional)..." style="
                             width: 100%;
                             padding: 10px;
@@ -1408,6 +1409,17 @@ function showSimpleTaskForm(userName, userEmail) {
                 return;
             }
 
+            const dueDateVal = $("#simple-task-due-date").val();
+            if (dueDateVal) {
+                const selected = new Date(dueDateVal + "T00:00:00");
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (selected <= today) {
+                    alert("Due date must be in the future.");
+                    return;
+                }
+            }
+
             // Get user data from overlay
             const userData = $("#simple-task-form-overlay").data();
             const userName = userData.userName;
@@ -1427,6 +1439,12 @@ function showSimpleTaskForm(userName, userEmail) {
             overlays.close_overlay("simple-task-form");
         });
     }
+
+    // Set min date to tomorrow so users cannot pick past/present dates
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minDateStr = tomorrow.toISOString().split("T")[0];
+    $("#simple-task-due-date").attr("min", minDateStr);
 
     // Store user data for the form
     $("#simple-task-form-overlay").data({

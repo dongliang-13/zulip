@@ -4,5 +4,8 @@
     <div class="todo-description-container">
         <input type="text" class="todo-description-input modal_text_input" disabled="true" placeholder="{{t 'Task description (optional)'}}" />
     </div>
+    <div class="todo-due-date-container">
+        <input type="date" class="todo-due-date-input modal_text_input" disabled="true" />
+    </div>
     {{> ./components/icon_button intent="danger" custom_classes="delete-option" icon="trash" aria-label=(t "Delete") }}
 </li>
